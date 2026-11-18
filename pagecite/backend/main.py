@@ -1,18 +1,21 @@
-"""FastAPI backend.
+"""FastAPI backend + browser UI.
 
-Step 1: PDFs dropped into pdfs/ are listed, viewable and indexed into FAISS (/pdfs, /sync).
+Step 1: PDFs are uploaded from the browser (/upload), saved to pdfs/ and indexed into FAISS.
 Step 2: questions are answered by OpenAI from chunks fetched out of FAISS (/ask).
+The HTML chat UI in frontend/html/ is served at /; the Streamlit UI (frontend/streamlit/) calls the same API.
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import openai
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend import embedder, llm
-from backend.config import PDF_DIR, TOP_K
-from backend.ingest import list_pdfs, sync_folder
+from backend.config import FRONTEND_DIR, MAX_UPLOAD_MB, PDF_DIR, TOP_K
+from backend.ingest import IngestError, list_pdfs, prepare_chunks, store_chunks, sync_folder
 from backend.vector_store import VectorStore
 
 store: VectorStore | None = None
@@ -26,7 +29,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="PDF-Vector RAG API", lifespan=lifespan)
+app = FastAPI(title="PageCite API", lifespan=lifespan)
 
 
 class AskRequest(BaseModel):
@@ -47,12 +50,20 @@ def _public(chunks: list[dict]) -> list[dict]:
     ]
 
 
+def _pdf_path(name: str) -> Path:
+    """Resolve a PDF name inside PDF_DIR, refusing anything that escapes it."""
+    path = (PDF_DIR / name).resolve()
+    if path.parent != PDF_DIR.resolve():
+        raise HTTPException(404, "PDF not found")
+    return path
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "vectors": store.total}
 
 
-# ---------- Step 1: PDFs in the project folder ----------
+# ---------- Step 1: upload & manage PDFs ----------
 @app.get("/pdfs")
 def pdfs():
     counts = store.chunk_counts()
@@ -71,17 +82,69 @@ def pdfs():
     }
 
 
+@app.post("/upload")
+def upload(files: list[UploadFile] = File(...)):
+    """Save uploaded PDFs and index them. Each file succeeds or fails on its own."""
+    results = []
+    for f in files:
+        name = Path(f.filename or "").name
+        data = f.file.read()
+
+        def fail(reason: str):
+            results.append({"file": name or "(unnamed)", "ok": False, "reason": reason})
+
+        if not name.lower().endswith(".pdf"):
+            fail("Only PDF files are supported")
+            continue
+        if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
+            fail(f"File is larger than {MAX_UPLOAD_MB} MB")
+            continue
+        if not data.startswith(b"%PDF"):
+            fail("Not a valid PDF file")
+            continue
+
+        try:
+            chunks = prepare_chunks(name, data)
+        except IngestError as e:
+            fail(str(e))
+            continue
+
+        replaced = _pdf_path(name).exists()
+        _pdf_path(name).write_bytes(data)
+        store_chunks(store, name, chunks)
+        results.append({
+            "file": name,
+            "ok": True,
+            "status": "replaced" if replaced else "added",
+            "chunks": len(chunks),
+            "pages": max(c["page"] for c in chunks),
+        })
+
+    return {"results": results, "total_vectors": store.total}
+
+
 @app.get("/pdfs/{name}")
 def view_pdf(name: str):
-    path = (PDF_DIR / name).resolve()
-    if path.parent != PDF_DIR.resolve() or not path.is_file():
+    path = _pdf_path(name)
+    if not path.is_file():
         raise HTTPException(404, "PDF not found")
     return FileResponse(path, media_type="application/pdf",
                         headers={"Content-Disposition": f'inline; filename="{path.name}"'})
 
 
+@app.delete("/pdfs/{name}")
+def delete_pdf(name: str):
+    path = _pdf_path(name)
+    if not path.is_file():
+        raise HTTPException(404, "PDF not found")
+    path.unlink()
+    store.remove_source(path.name)
+    return {"status": "deleted", "file": path.name, "total_vectors": store.total}
+
+
 @app.post("/sync")
 def sync():
+    """Re-scan the pdfs/ folder (for PDFs copied in by hand)."""
     return sync_folder(store)
 
 
@@ -116,3 +179,7 @@ def ask(req: AskRequest):
 def reset():
     store.reset()
     return {"status": "index cleared"}
+
+
+# ---------- Browser UI (mounted last so the API routes above take priority) ----------
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="ui")

@@ -1,13 +1,13 @@
 """Load step: read a PDF into one segment per page."""
-from pathlib import Path
+from io import BytesIO
 
 from pypdf import PdfReader
 
 
-def load_pdf(path: Path) -> list[dict]:
+def load_pdf(data: bytes, source: str) -> list[dict]:
     """Return a list of {"text", "source", "page"} dicts, one per page."""
-    reader = PdfReader(str(path))
+    reader = PdfReader(BytesIO(data))
     return [
-        {"text": page.extract_text() or "", "source": path.name, "page": i + 1}
+        {"text": page.extract_text() or "", "source": source, "page": i + 1}
         for i, page in enumerate(reader.pages)
     ]

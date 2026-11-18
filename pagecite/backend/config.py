@@ -3,8 +3,12 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Step 1: drop your PDFs into this folder manually
+# Uploaded PDFs are saved here (you can also copy PDFs in by hand)
 PDF_DIR = BASE_DIR / "pdfs"
+MAX_UPLOAD_MB = 50
+
+# HTML UI (plain HTML/CSS/JS, served by FastAPI at /). The Streamlit UI lives in frontend/streamlit/.
+FRONTEND_DIR = BASE_DIR / "frontend" / "html"
 
 INDEX_DIR = BASE_DIR / "data" / "faiss_index"
 INDEX_FILE = INDEX_DIR / "index.faiss"

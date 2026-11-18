@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PageCite · Chat with your PDFs</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2313302b'/><path d='M10 8h8l5 5v11H10z' fill='none' stroke='%23f0b867' stroke-width='2' stroke-linejoin='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <!-- Markdown rendering for answers (falls back to plain text if offline) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <!-- ===== Sidebar ===== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 4h7l4 4v12H7z"/><path d="M14 4v4h4M10 13h5M10 16h3"/></svg>
+        </span>
+        <span class="brand-name">Page<span>Cite</span></span>
+      </div>
+
+      <button class="new-chat" id="newChat" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 9v6M9 12h6"/></svg>
+        New chat
+      </button>
+
+      <div class="kb-label">Knowledge base</div>
+
+      <div class="kb-summary">
+        <span class="kb-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 4h7l4 4v12H7z"/><path d="M14 4v4h4"/></svg>
+        </span>
+        <div>
+          <div class="kb-title">Your documents</div>
+          <div class="kb-count" id="docCount">Loading…</div>
+        </div>
+      </div>
+
+      <ul class="doc-list" id="docList" aria-label="Uploaded documents"></ul>
+
+      <label class="dropzone" id="dropzone" tabindex="0">
+        <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple hidden>
+        <span class="dz-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9"/><path d="M12 12v8M9 15l3-3 3 3"/></svg>
+        </span>
+        <span class="dz-title" id="dzTitle">Add PDF documents</span>
+        <span class="dz-sub" id="dzSub">Drop PDFs or browse</span>
+      </label>
+      <div class="dz-hint">PDF only · up to 50 MB each</div>
+
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <!-- ===== Main chat ===== -->
+    <main class="main">
+      <header class="topbar">
+        <button class="menu-btn" id="menuBtn" type="button" aria-label="Open sidebar">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <div>
+          <div class="topbar-title">Knowledge assistant</div>
+          <div class="topbar-sub">Ask anything about your documents</div>
+        </div>
+        <span class="pill"><span class="dot"></span>RAG assistant</span>
+      </header>
+
+      <section class="chat" id="chat" aria-live="polite">
+        <div class="welcome" id="welcome">
+          <span class="welcome-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z"/></svg>
+          </span>
+          <div class="eyebrow">Your documents, at your fingertips</div>
+          <h1>What would you like to know?</h1>
+          <p>Ask a question and I'll find the answer in your knowledge base, <br>with relevant sources.</p>
+          <div class="suggestions">
+            <button type="button" data-prompt="Summarize my documents. Give the key points of each one.">Summarize my documents<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></button>
+            <button type="button" data-prompt="What are the most important details in my documents, such as dates, amounts, eligibility and deadlines?">Find important details<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></button>
+            <button type="button" data-prompt="Compare the main topics covered across my documents. Use a short table.">Compare topics<svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></button>
+          </div>
+        </div>
+        <div class="messages" id="messages"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <form class="composer" id="composer">
+          <textarea id="question" rows="1" placeholder="Ask a question about your documents…" aria-label="Your question"></textarea>
+          <button type="submit" id="sendBtn" aria-label="Send" disabled>
+            <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          </button>
+        </form>
+        <div class="disclaimer">AI can make mistakes. Check important information against the source documents.</div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+</body>
+</html>

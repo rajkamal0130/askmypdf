@@ -20,4 +20,4 @@ def embed(texts: list[str]) -> np.ndarray:
 
 
 def dimension() -> int:
-    return get_model().get_sentence_embedding_dimension()
+    return get_model().get_embedding_dimension()
